@@ -111,6 +111,33 @@ granulepos_test_encode (int frequency, int auto_p)
 #endif
     if ((keyframe + keydist) != frame + 1)
       FAIL ("encoder granulepos does not map to the correct frame number");
+    /*The first data packet is a keyframe whose granule position holds the
+      frame count (1) in the keyframe base with a zero intra-frame offset.*/
+    if (frame == 0) {
+      if (!theora_packet_iskeyframe (&op))
+        FAIL ("first data packet was not marked as a keyframe");
+      if (keyframe != 1 || keydist != 0)
+        FAIL ("first frame granulepos does not encode a 1:0 keyframe base");
+      if ((long long int)op.granulepos != 1LL << shift)
+        FAIL ("first frame granulepos does not equal the shifted frame count");
+    }
+    if (theora_packet_iskeyframe (&op)) {
+      if (keydist != 0)
+        FAIL ("keyframe granulepos has a non-zero intra-frame offset");
+      if (keyframe != frame + 1)
+        FAIL ("keyframe base does not hold the frame count");
+    }
+    else {
+      /*For an inter frame the keyframe base references the last keyframe and
+        must not be mistaken for the global frame number.*/
+      if (keydist <= 0)
+        FAIL ("inter frame granulepos has no intra-frame offset");
+      if (keyframe >= frame + 1)
+        FAIL ("keyframe base misread as the global frame number");
+      if (theora_granule_frame (&th,
+       (ogg_int64_t)keyframe << shift) == frame)
+        FAIL ("keyframe base must not be used as the global frame number");
+    }
     if (tframe != frame)
       FAIL ("theora_granule_frame returned incorrect results");
     if (fabs(rate*(frame+1) - ttime) > 1.0e-6)
@@ -130,6 +157,63 @@ granulepos_test_encode (int frequency, int auto_p)
   return 0;
 }
 
+/*Unknown (negative) granule positions must report the documented -1 result
+  rather than being interpreted as a frame.*/
+static int
+granulepos_test_unknown (int frequency, int auto_p)
+{
+  theora_info ti;
+  theora_state th;
+  int result;
+
+  theora_info_init (&ti);
+
+  ti.width = 32;
+  ti.height = 32;
+  ti.frame_width = ti.width;
+  ti.frame_height = ti.frame_height;
+  ti.offset_x = 0;
+  ti.offset_y = 0;
+  ti.fps_numerator = 16;
+  ti.fps_denominator = 1;
+  ti.aspect_numerator = 1;
+  ti.aspect_denominator = 1;
+  ti.colorspace = OC_CS_UNSPECIFIED;
+  ti.pixelformat = OC_PF_420;
+  ti.target_bitrate = 0;
+  ti.quality = 16;
+
+  ti.dropframes_p = 0;
+  ti.quick_p = 1;
+  ti.keyframe_auto_p = auto_p;
+  ti.keyframe_frequency = frequency;
+  ti.keyframe_frequency_force = frequency;
+
+  ti.keyframe_data_target_bitrate = ti.target_bitrate * 1.5;
+  ti.keyframe_auto_threshold = 80;
+  ti.keyframe_mindistance = MIN(8, frequency);
+  ti.noise_sensitivity = 1;
+
+  result = theora_encode_init (&th, &ti);
+  if (result == OC_DISABLED) {
+    theora_clear (&th);
+    theora_info_clear (&ti);
+    return 0;
+  }
+  else if (result < 0) {
+    FAIL ("negative return code initializing encoder");
+  }
+
+  if (theora_granule_frame (&th, -1) != -1)
+    FAIL ("theora_granule_frame accepted an unknown granulepos");
+  if (theora_granule_time (&th, -1) != -1.0)
+    FAIL ("theora_granule_time accepted an unknown granulepos");
+
+  theora_info_clear (&ti);
+  theora_clear (&th);
+  return 0;
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -139,6 +223,8 @@ int main(int argc, char *argv[])
   granulepos_test_encode (4, 1);
   granulepos_test_encode (8, 1);
   granulepos_test_encode (64, 1);
+
+  granulepos_test_unknown (4, 1);
 
   exit (0);
 }
