@@ -18,7 +18,8 @@ TESTS_DEC = noop_theora \
 	comment comment_theoradec comment_theora
 
 TESTS_ENC = noop noop_theoraenc \
-	granulepos granulepos_theoraenc granulepos_theora
+	granulepos granulepos_theoraenc granulepos_theora \
+	planegeometry
 
 if THEORA_DISABLE_ENCODE
 TESTS = $(TESTS_DEC)
@@ -68,3 +69,8 @@ granulepos_theoraenc_CFLAGS = $(OGG_CFLAGS)
 granulepos_theora_SOURCES = granulepos_theora.c
 granulepos_theora_LDADD = $(THEORA_LIBS) -lm
 granulepos_theora_CFLAGS = $(OGG_CFLAGS)
+
+# plane geometry, display crop, and stride handling
+planegeometry_SOURCES = planegeometry.c
+planegeometry_LDADD = $(THEORAENC_LIBS)
+planegeometry_CFLAGS = $(OGG_CFLAGS)
